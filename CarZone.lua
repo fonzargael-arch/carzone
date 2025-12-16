@@ -1,39 +1,62 @@
 --[[
     ═══════════════════════════════════════
-    🏎️ GF HUB - Car Zone Auto Farm (FIXED)
+    🔍 GF HUB - Car Zone SCANNER
     ═══════════════════════════════════════
     Created by: Gael Fonzar
     Game: Car Zone Racing & Drifting
-    Version: 1.1 (Anti-Kick + Optimized)
+    Version: 2.0 - Full Scanner
+    ═══════════════════════════════════════
+    This script will SCAN and DETECT:
+    • All RemoteEvents/Functions
+    • Money systems
+    • Winter event systems
+    • Race systems
+    • LocalScripts
     ═══════════════════════════════════════
 ]]
 
 -- Load Fluent Library
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local StarterGui = game:GetService("StarterGui")
 
 local player = Players.LocalPlayer
 
--- Variables
-local autoRaceEnabled = false
+-- Scanner Data Storage
+local scanData = {
+    remoteEvents = {},
+    remoteFunctions = {},
+    bindableEvents = {},
+    moneyRelated = {},
+    winterRelated = {},
+    raceRelated = {},
+    localScripts = {},
+    moduleScripts = {}
+}
+
+-- Auto Farm Variables
 local autoWinterEnabled = false
-local snowflakeESPEnabled = false
-local collectDelay = 1.5 -- Delay anti-kick
-local useSmooth = true -- Movimiento suave
+local autoRaceEnabled = false
+local collectDelay = 1.5
+local useSmooth = true
 
 local connections = {}
-local espObjects = {}
 local collectedSnowflakes = {}
 
 -- Helper Functions
+local function notify(title, content, duration)
+    Fluent:Notify({
+        Title = title,
+        Content = content,
+        Duration = duration or 3
+    })
+end
+
 local function getChar()
     return player.Character
 end
@@ -43,49 +66,209 @@ local function getRoot()
     return char and char:FindFirstChild("HumanoidRootPart")
 end
 
-local function getHumanoid()
+-- ═══════════════════════════════════════
+-- 🔍 SCANNER FUNCTIONS
+-- ═══════════════════════════════════════
+
+local function scanForRemotes()
+    print("════════════════════════════════")
+    print("🔍 SCANNING FOR REMOTES...")
+    print("════════════════════════════════")
+    
+    scanData.remoteEvents = {}
+    scanData.remoteFunctions = {}
+    scanData.bindableEvents = {}
+    
+    -- Scan ReplicatedStorage
+    for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") then
+            table.insert(scanData.remoteEvents, obj)
+            print("📡 RemoteEvent: " .. obj:GetFullName())
+            
+            -- Classify by keywords
+            local name = obj.Name:lower()
+            if name:find("money") or name:find("cash") or name:find("coin") or name:find("currency") then
+                table.insert(scanData.moneyRelated, obj)
+                print("   💰 [MONEY RELATED]")
+            end
+            if name:find("winter") or name:find("snow") or name:find("event") then
+                table.insert(scanData.winterRelated, obj)
+                print("   ❄️ [WINTER RELATED]")
+            end
+            if name:find("race") or name:find("start") or name:find("finish") or name:find("checkpoint") then
+                table.insert(scanData.raceRelated, obj)
+                print("   🏁 [RACE RELATED]")
+            end
+        elseif obj:IsA("RemoteFunction") then
+            table.insert(scanData.remoteFunctions, obj)
+            print("📞 RemoteFunction: " .. obj:GetFullName())
+        elseif obj:IsA("BindableEvent") then
+            table.insert(scanData.bindableEvents, obj)
+            print("🔗 BindableEvent: " .. obj:GetFullName())
+        end
+    end
+    
+    print("════════════════════════════════")
+    print("✅ SCAN COMPLETE!")
+    print("📡 RemoteEvents: " .. #scanData.remoteEvents)
+    print("📞 RemoteFunctions: " .. #scanData.remoteFunctions)
+    print("💰 Money Related: " .. #scanData.moneyRelated)
+    print("❄️ Winter Related: " .. #scanData.winterRelated)
+    print("🏁 Race Related: " .. #scanData.raceRelated)
+    print("════════════════════════════════")
+    
+    notify("✅ Scan Complete", 
+        #scanData.remoteEvents .. " RemoteEvents found\n" ..
+        #scanData.moneyRelated .. " Money remotes\n" ..
+        #scanData.winterRelated .. " Winter remotes\n" ..
+        #scanData.raceRelated .. " Race remotes", 5)
+end
+
+local function scanForScripts()
+    print("════════════════════════════════")
+    print("🔍 SCANNING FOR SCRIPTS...")
+    print("════════════════════════════════")
+    
+    scanData.localScripts = {}
+    scanData.moduleScripts = {}
+    
+    -- Scan PlayerGui
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if playerGui then
+        for _, obj in pairs(playerGui:GetDescendants()) do
+            if obj:IsA("LocalScript") then
+                table.insert(scanData.localScripts, obj)
+                print("📜 LocalScript: " .. obj:GetFullName())
+            elseif obj:IsA("ModuleScript") then
+                table.insert(scanData.moduleScripts, obj)
+                print("📦 ModuleScript: " .. obj:GetFullName())
+            end
+        end
+    end
+    
+    -- Scan Character
     local char = getChar()
-    return char and char:FindFirstChildOfClass("Humanoid")
+    if char then
+        for _, obj in pairs(char:GetDescendants()) do
+            if obj:IsA("LocalScript") then
+                table.insert(scanData.localScripts, obj)
+                print("📜 LocalScript (Char): " .. obj:GetFullName())
+            end
+        end
+    end
+    
+    print("════════════════════════════════")
+    print("✅ SCRIPT SCAN COMPLETE!")
+    print("📜 LocalScripts: " .. #scanData.localScripts)
+    print("📦 ModuleScripts: " .. #scanData.moduleScripts)
+    print("════════════════════════════════")
+    
+    notify("✅ Scripts Scanned", 
+        #scanData.localScripts .. " LocalScripts\n" ..
+        #scanData.moduleScripts .. " ModuleScripts", 3)
 end
 
--- Notify Function
-local function notify(title, content, duration)
-    Fluent:Notify({
-        Title = title,
-        Content = content,
-        Duration = duration or 3
-    })
+local function scanWorkspaceForCollectibles()
+    print("════════════════════════════════")
+    print("🔍 SCANNING WORKSPACE FOR COLLECTIBLES...")
+    print("════════════════════════════════")
+    
+    local snowflakes = 0
+    local coins = 0
+    local checkpoints = 0
+    
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        local name = obj.Name:lower()
+        
+        if name:find("snow") or name:find("flake") then
+            snowflakes = snowflakes + 1
+            if snowflakes <= 3 then
+                print("❄️ Snowflake: " .. obj:GetFullName())
+            end
+        end
+        
+        if name:find("coin") or name:find("money") or name:find("cash") then
+            coins = coins + 1
+            if coins <= 3 then
+                print("💰 Coin: " .. obj:GetFullName())
+            end
+        end
+        
+        if name:find("checkpoint") or name:find("finish") or name:find("gate") then
+            checkpoints = checkpoints + 1
+            if checkpoints <= 3 then
+                print("🏁 Checkpoint: " .. obj:GetFullName())
+            end
+        end
+    end
+    
+    print("════════════════════════════════")
+    print("✅ WORKSPACE SCAN COMPLETE!")
+    print("❄️ Snowflakes: " .. snowflakes)
+    print("💰 Coins: " .. coins)
+    print("🏁 Checkpoints: " .. checkpoints)
+    print("════════════════════════════════")
+    
+    notify("✅ Workspace Scanned", 
+        snowflakes .. " Snowflakes\n" ..
+        coins .. " Coins\n" ..
+        checkpoints .. " Checkpoints", 3)
 end
 
--- Find Snowflakes (OPTIMIZED)
+local function deepScanPlayerGui()
+    print("════════════════════════════════")
+    print("🔍 DEEP SCANNING PLAYER GUI...")
+    print("════════════════════════════════")
+    
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if not playerGui then return end
+    
+    local buttons = {}
+    local frames = {}
+    local textLabels = {}
+    
+    for _, obj in pairs(playerGui:GetDescendants()) do
+        if obj:IsA("TextButton") then
+            table.insert(buttons, obj)
+            local text = obj.Text:lower()
+            if text:find("start") or text:find("race") or text:find("join") or text:find("play") then
+                print("🔘 RACE BUTTON: " .. obj:GetFullName() .. " | Text: '" .. obj.Text .. "'")
+            end
+            if text:find("claim") or text:find("collect") or text:find("reward") then
+                print("🎁 REWARD BUTTON: " .. obj:GetFullName() .. " | Text: '" .. obj.Text .. "'")
+            end
+        elseif obj:IsA("Frame") and obj.Name:lower():find("race") then
+            table.insert(frames, obj)
+            print("🖼️ RACE FRAME: " .. obj:GetFullName())
+        elseif obj:IsA("TextLabel") then
+            local text = obj.Text:lower()
+            if text:find("money") or text:find("$") or text:find("cash") then
+                print("💰 MONEY LABEL: " .. obj:GetFullName() .. " | Text: '" .. obj.Text .. "'")
+            end
+        end
+    end
+    
+    print("════════════════════════════════")
+    print("✅ GUI SCAN COMPLETE!")
+    print("🔘 Buttons: " .. #buttons)
+    print("🖼️ Frames: " .. #frames)
+    print("════════════════════════════════")
+    
+    notify("✅ GUI Scanned", #buttons .. " Buttons found", 2)
+end
+
+-- ═══════════════════════════════════════
+-- 🎯 AUTO FARM FUNCTIONS (Using Scan Data)
+-- ═══════════════════════════════════════
+
 local function findSnowflakes()
     local snowflakes = {}
     
-    -- Buscar solo en lugares específicos para evitar crash
-    local searchLocations = {
-        Workspace:FindFirstChild("Snowflakes"),
-        Workspace:FindFirstChild("Winter"),
-        Workspace:FindFirstChild("Map")
-    }
-    
-    for _, location in pairs(searchLocations) do
-        if location then
-            for _, obj in pairs(location:GetChildren()) do
-                -- Buscar solo BaseParts para evitar lag
-                if obj:IsA("BasePart") and not collectedSnowflakes[obj] then
-                    local name = obj.Name:lower()
-                    if name:find("snow") or name:find("flake") or name:find("winter") then
-                        table.insert(snowflakes, obj)
-                    end
-                elseif obj:IsA("Model") then
-                    local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-                    if primary and not collectedSnowflakes[obj] then
-                        local name = obj.Name:lower()
-                        if name:find("snow") or name:find("flake") or name:find("winter") then
-                            table.insert(snowflakes, obj)
-                        end
-                    end
-                end
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") or obj:IsA("Model") then
+            local name = obj.Name:lower()
+            if (name:find("snow") or name:find("flake")) and not collectedSnowflakes[obj] then
+                table.insert(snowflakes, obj)
             end
         end
     end
@@ -93,119 +276,19 @@ local function findSnowflakes()
     return snowflakes
 end
 
--- ESP for Snowflakes (FIXED - NO CRASH)
-local function createSnowflakeESP(snowflake)
-    if not snowflake or espObjects[snowflake] then return end
-    
-    pcall(function()
-        local part = snowflake:IsA("Model") and (snowflake.PrimaryPart or snowflake:FindFirstChildWhichIsA("BasePart")) or snowflake
-        if not part or not part:IsA("BasePart") then return end
-        
-        -- Solo crear BillboardGui (más ligero que Highlight)
-        local billboard = Instance.new("BillboardGui")
-        billboard.Name = "GF_SnowESP"
-        billboard.Adornee = part
-        billboard.Size = UDim2.new(0, 100, 0, 50)
-        billboard.StudsOffset = Vector3.new(0, 2, 0)
-        billboard.AlwaysOnTop = true
-        billboard.Parent = part
-        
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(1, 0, 1, 0)
-        frame.BackgroundColor3 = Color3.fromRGB(135, 206, 250)
-        frame.BackgroundTransparency = 0.7
-        frame.BorderSizePixel = 2
-        frame.BorderColor3 = Color3.fromRGB(255, 255, 255)
-        frame.Parent = billboard
-        
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, 0, 0.6, 0)
-        label.BackgroundTransparency = 1
-        label.Text = "❄️"
-        label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        label.TextScaled = true
-        label.Font = Enum.Font.GothamBold
-        label.Parent = frame
-        
-        local distLabel = Instance.new("TextLabel")
-        distLabel.Size = UDim2.new(1, 0, 0.4, 0)
-        distLabel.Position = UDim2.new(0, 0, 0.6, 0)
-        distLabel.BackgroundTransparency = 1
-        distLabel.Text = "0m"
-        distLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        distLabel.TextScaled = true
-        distLabel.Font = Enum.Font.Gotham
-        distLabel.Parent = frame
-        
-        espObjects[snowflake] = {
-            billboard = billboard,
-            distLabel = distLabel,
-            part = part
-        }
-    end)
-end
-
-local function removeSnowflakeESP(snowflake)
-    if espObjects[snowflake] then
-        pcall(function()
-            if espObjects[snowflake].billboard then
-                espObjects[snowflake].billboard:Destroy()
-            end
-        end)
-        espObjects[snowflake] = nil
-    end
-end
-
-local function updateSnowflakeESP()
-    if not snowflakeESPEnabled then return end
-    
-    local myRoot = getRoot()
-    if not myRoot then return end
-    
-    for snowflake, espData in pairs(espObjects) do
-        pcall(function()
-            if snowflake and snowflake.Parent and espData.part and espData.distLabel then
-                local distance = math.floor((myRoot.Position - espData.part.Position).Magnitude)
-                espData.distLabel.Text = distance .. "m"
-            else
-                removeSnowflakeESP(snowflake)
-            end
-        end)
-    end
-end
-
-local function updateAllSnowflakeESP()
-    -- Clear old ESP
-    for snowflake, _ in pairs(espObjects) do
-        removeSnowflakeESP(snowflake)
-    end
-    
-    if snowflakeESPEnabled then
-        local snowflakes = findSnowflakes()
-        for _, snowflake in pairs(snowflakes) do
-            createSnowflakeESP(snowflake)
-        end
-        notify("ESP Updated", "Found " .. #snowflakes .. " snowflakes", 2)
-    end
-end
-
--- SMOOTH TELEPORT (Anti-Kick)
 local function smoothTeleport(targetPos)
     local root = getRoot()
     if not root then return false end
     
     if useSmooth then
-        -- Movimiento suave en vez de teleport instantáneo
         local distance = (root.Position - targetPos).Magnitude
         local steps = math.clamp(math.floor(distance / 10), 3, 10)
         
         for i = 1, steps do
             if not autoWinterEnabled then break end
-            
             local alpha = i / steps
             local newPos = root.Position:Lerp(targetPos, alpha)
             root.CFrame = CFrame.new(newPos)
-            
             task.wait(0.1)
         end
     else
@@ -215,22 +298,18 @@ local function smoothTeleport(targetPos)
     return true
 end
 
--- Auto Collect Snowflakes (FIXED - ANTI-KICK)
 local function autoCollectSnowflakes()
     while autoWinterEnabled do
         local snowflakes = findSnowflakes()
         
         if #snowflakes == 0 then
-            notify("⚠️ No Snowflakes", "Waiting for snowflakes...", 2)
             task.wait(5)
         else
-            -- Ordenar por distancia
             local root = getRoot()
             if root then
                 table.sort(snowflakes, function(a, b)
                     local partA = a:IsA("Model") and (a.PrimaryPart or a:FindFirstChildWhichIsA("BasePart")) or a
                     local partB = b:IsA("Model") and (b.PrimaryPart or b:FindFirstChildWhichIsA("BasePart")) or b
-                    
                     if partA and partB then
                         return (root.Position - partA.Position).Magnitude < (root.Position - partB.Position).Magnitude
                     end
@@ -245,20 +324,12 @@ local function autoCollectSnowflakes()
                     local targetPart = snowflake:IsA("Model") and (snowflake.PrimaryPart or snowflake:FindFirstChildWhichIsA("BasePart")) or snowflake
                     
                     if targetPart then
-                        -- Teleport suave
-                        local success = smoothTeleport(targetPart.Position)
+                        smoothTeleport(targetPart.Position)
+                        task.wait(collectDelay)
+                        collectedSnowflakes[snowflake] = true
                         
-                        if success then
-                            -- Esperar a recoger
-                            task.wait(collectDelay)
-                            
-                            -- Marcar como recolectado
-                            collectedSnowflakes[snowflake] = true
-                            
-                            -- Verificar si fue removido
-                            if not snowflake.Parent then
-                                notify("✅ Collected", "Snowflake +1", 1)
-                            end
+                        if not snowflake.Parent then
+                            notify("✅ +1", "Snowflake collected", 1)
                         end
                     end
                 end
@@ -269,190 +340,187 @@ local function autoCollectSnowflakes()
     end
 end
 
--- FIND RACE REMOTES (FIXED)
-local function findRaceRemotes()
-    local remotes = {}
-    
-    -- Buscar en ReplicatedStorage
-    for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-            local name = obj.Name:lower()
-            if name:find("race") or name:find("start") or name:find("join") or name:find("event") then
-                table.insert(remotes, obj)
-            end
-        end
-    end
-    
-    return remotes
-end
-
--- Start Race (MULTIPLE METHODS)
 local function startRace()
-    -- Método 1: Buscar botones en UI
-    local playerGui = player:FindFirstChild("PlayerGui")
-    if playerGui then
-        for _, gui in pairs(playerGui:GetDescendants()) do
-            if gui:IsA("TextButton") then
-                local text = gui.Text:lower()
-                if text:find("start") or text:find("race") or text:find("join") or text:find("play") then
-                    -- Intentar hacer click
-                    for _, connection in pairs(getconnections(gui.MouseButton1Click)) do
-                        pcall(function()
-                            connection:Fire()
-                        end)
-                    end
-                    
-                    -- También simular click visual
-                    pcall(function()
-                        gui.MouseButton1Click:Fire()
-                    end)
-                    
-                    notify("🏁 Race Started", "Method: UI Button", 2)
-                    return true
-                end
-            end
+    -- Try all race-related remotes found in scan
+    for _, remote in pairs(scanData.raceRelated) do
+        if remote.Name == "Start" then
+            pcall(function()
+                remote:FireServer()
+                notify("🏁 Race Started", "Using: " .. remote.Name, 2)
+            end)
+            return true
         end
     end
     
-    -- Método 2: Buscar RemoteEvents
-    local remotes = findRaceRemotes()
-    for _, remote in pairs(remotes) do
-        pcall(function()
-            if remote:IsA("RemoteEvent") then
+    -- Try TeleportEvent first, then Start
+    for _, remote in pairs(scanData.remoteEvents) do
+        if remote.Name == "TeleportEvent" then
+            pcall(function()
                 remote:FireServer()
-                notify("🏁 Race Started", "Method: RemoteEvent", 2)
-            elseif remote:IsA("RemoteFunction") then
-                remote:InvokeServer()
-                notify("🏁 Race Started", "Method: RemoteFunction", 2)
-            end
-        end)
-        task.wait(0.5)
+            end)
+            task.wait(0.5)
+        end
+    end
+    
+    for _, remote in pairs(scanData.remoteEvents) do
+        if remote.Name == "Start" then
+            pcall(function()
+                remote:FireServer()
+                notify("🏁 Race Started", "Success!", 2)
+            end)
+            return true
+        end
     end
     
     return false
 end
 
--- Auto Race Loop
 local function autoRaceLoop()
     while autoRaceEnabled do
-        notify("🔄 Trying Race", "Attempting to start...", 2)
-        
-        local started = startRace()
-        
-        if started then
-            task.wait(10) -- Esperar tiempo de carrera
-        else
-            task.wait(5)
-        end
+        startRace()
+        task.wait(15)
     end
 end
 
--- Create Window
+-- ═══════════════════════════════════════
+-- 🎨 CREATE UI
+-- ═══════════════════════════════════════
+
 local Window = Fluent:CreateWindow({
-    Title = "🏎️ GF HUB - Car Zone v1.1",
-    SubTitle = "by Gael Fonzar (Fixed)",
+    Title = "🔍 GF HUB - Car Zone SCANNER",
+    SubTitle = "by Gael Fonzar v2.0",
     TabWidth = 160,
-    Size = UDim2.fromOffset(550, 420),
+    Size = UDim2.fromOffset(580, 480),
     Acrylic = true,
     Theme = "Darker",
     MinimizeKey = Enum.KeyCode.RightShift
 })
 
--- Create Tabs
 local Tabs = {
-    Main = Window:AddTab({ Title = "🏠 Main", Icon = "home" }),
-    Winter = Window:AddTab({ Title = "❄️ Winter Event", Icon = "snowflake" }),
+    Scanner = Window:AddTab({ Title = "🔍 Scanner", Icon = "search" }),
+    Winter = Window:AddTab({ Title = "❄️ Winter", Icon = "snowflake" }),
     Race = Window:AddTab({ Title = "🏁 Race", Icon = "flag" }),
-    Settings = Window:AddTab({ Title = "⚙️ Settings", Icon = "settings" })
+    Info = Window:AddTab({ Title = "📊 Info", Icon = "info" })
 }
 
 -- ═══════════════════════════════════════
--- 🏠 MAIN TAB
+-- 🔍 SCANNER TAB
 -- ═══════════════════════════════════════
 
-Tabs.Main:AddParagraph({
-    Title = "Welcome to GF HUB v1.1!",
-    Content = "FIXES:\n• ESP Optimized (No Crash)\n• Anti-Kick System\n• Smooth Teleport\n• Better Race Detection"
+Tabs.Scanner:AddParagraph({
+    Title = "🔍 Game Scanner",
+    Content = "This will scan the ENTIRE game to find:\n• RemoteEvents\n• Money systems\n• Winter event systems\n• Race systems\n• Scripts"
 })
 
-Tabs.Main:AddParagraph({
-    Title = "⚠️ Important",
-    Content = "Snowflake collection uses SMOOTH movement to avoid kicks.\n\nIncrease 'Collect Delay' if you still get kicked."
+Tabs.Scanner:AddButton({
+    Title = "🔍 FULL GAME SCAN",
+    Description = "Scan everything (Recommended first!)",
+    Callback = function()
+        notify("🔍 Scanning...", "Please wait...", 2)
+        scanForRemotes()
+        task.wait(1)
+        scanForScripts()
+        task.wait(1)
+        scanWorkspaceForCollectibles()
+        task.wait(1)
+        deepScanPlayerGui()
+        notify("✅ SCAN COMPLETE!", "Check console (F9) for details", 5)
+    end
+})
+
+Tabs.Scanner:AddSection("Individual Scans")
+
+Tabs.Scanner:AddButton({
+    Title = "📡 Scan Remotes Only",
+    Description = "Find all RemoteEvents/Functions",
+    Callback = function()
+        scanForRemotes()
+    end
+})
+
+Tabs.Scanner:AddButton({
+    Title = "📜 Scan Scripts Only",
+    Description = "Find LocalScripts and Modules",
+    Callback = function()
+        scanForScripts()
+    end
+})
+
+Tabs.Scanner:AddButton({
+    Title = "🌍 Scan Workspace Only",
+    Description = "Find collectibles in workspace",
+    Callback = function()
+        scanWorkspaceForCollectibles()
+    end
+})
+
+Tabs.Scanner:AddButton({
+    Title = "🎨 Scan GUI Only",
+    Description = "Find buttons and interfaces",
+    Callback = function()
+        deepScanPlayerGui()
+    end
+})
+
+Tabs.Scanner:AddSection("Export Scan Data")
+
+Tabs.Scanner:AddButton({
+    Title = "📋 Print All Remotes",
+    Description = "Print remote names to console",
+    Callback = function()
+        print("════════════════════════════════")
+        print("📡 ALL REMOTEEVENTS:")
+        for i, remote in pairs(scanData.remoteEvents) do
+            print(i .. ". " .. remote.Name .. " | " .. remote:GetFullName())
+        end
+        print("════════════════════════════════")
+        notify("✅ Printed", #scanData.remoteEvents .. " remotes in console (F9)", 3)
+    end
 })
 
 -- ═══════════════════════════════════════
--- ❄️ WINTER EVENT TAB
+-- ❄️ WINTER TAB
 -- ═══════════════════════════════════════
 
 Tabs.Winter:AddParagraph({
-    Title = "Winter Event (FIXED)",
-    Content = "Now with anti-kick protection!"
-})
-
-local SnowflakeESPToggle = Tabs.Winter:AddToggle("SnowflakeESP", {
-    Title = "👁️ Snowflake ESP",
-    Description = "Optimized - Won't crash",
-    Default = false,
-    Callback = function(Value)
-        snowflakeESPEnabled = Value
-        if Value then
-            updateAllSnowflakeESP()
-        else
-            for snowflake, _ in pairs(espObjects) do
-                removeSnowflakeESP(snowflake)
-            end
-        end
-        notify(Value and "❄️ ESP ON" or "ESP OFF", "", 2)
-    end
+    Title = "❄️ Winter Event Auto Farm",
+    Content = "Auto collect snowflakes with anti-kick"
 })
 
 local AutoWinterToggle = Tabs.Winter:AddToggle("AutoWinter", {
     Title = "❄️ Auto Collect Snowflakes",
-    Description = "With anti-kick protection",
+    Description = "With smooth movement",
     Default = false,
     Callback = function(Value)
         autoWinterEnabled = Value
-        
         if Value then
-            collectedSnowflakes = {} -- Reset
-            notify("❄️ Auto Winter ON", "Using smooth movement", 2)
+            collectedSnowflakes = {}
+            notify("❄️ Started", "Collecting snowflakes...", 2)
             task.spawn(autoCollectSnowflakes)
         else
-            notify("Auto Winter OFF", "", 2)
+            notify("Stopped", "", 2)
         end
     end
 })
 
-local SmoothToggle = Tabs.Winter:AddToggle("SmoothMovement", {
+local SmoothToggle = Tabs.Winter:AddToggle("Smooth", {
     Title = "🌊 Smooth Movement",
-    Description = "Prevents kicks (Recommended: ON)",
+    Description = "Anti-kick (Recommended)",
     Default = true,
     Callback = function(Value)
         useSmooth = Value
-        notify(Value and "Smooth ON" or "Smooth OFF", "", 2)
     end
 })
 
-local CollectDelaySlider = Tabs.Winter:AddSlider("CollectDelay", {
+local DelaySlider = Tabs.Winter:AddSlider("Delay", {
     Title = "Collect Delay",
-    Description = "Time between collections (Anti-Kick)",
+    Description = "Seconds between collections",
     Default = 1.5,
     Min = 0.5,
     Max = 5,
     Rounding = 1,
     Callback = function(Value)
         collectDelay = Value
-        notify("Delay Set", Value .. " seconds", 2)
-    end
-})
-
-Tabs.Winter:AddSection("Manual Controls")
-
-Tabs.Winter:AddButton({
-    Title = "🔄 Refresh ESP",
-    Description = "Find new snowflakes",
-    Callback = function()
-        updateAllSnowflakeESP()
     end
 })
 
@@ -461,16 +529,7 @@ Tabs.Winter:AddButton({
     Description = "Show available snowflakes",
     Callback = function()
         local snowflakes = findSnowflakes()
-        notify("❄️ Found", #snowflakes .. " snowflakes available", 3)
-    end
-})
-
-Tabs.Winter:AddButton({
-    Title = "🗑️ Clear Collected List",
-    Description = "Reset collected snowflakes",
-    Callback = function()
-        collectedSnowflakes = {}
-        notify("✅ Cleared", "Collected list reset", 2)
+        notify("❄️ Found", #snowflakes .. " snowflakes", 2)
     end
 })
 
@@ -479,152 +538,98 @@ Tabs.Winter:AddButton({
 -- ═══════════════════════════════════════
 
 Tabs.Race:AddParagraph({
-    Title = "Auto Race (Experimental)",
-    Content = "Trying multiple methods to start races"
+    Title = "🏁 Auto Race System",
+    Content = "Uses detected remotes from scanner"
 })
 
 local AutoRaceToggle = Tabs.Race:AddToggle("AutoRace", {
     Title = "🏁 Auto Start Races",
-    Description = "Experimental feature",
+    Description = "Automatically start races",
     Default = false,
     Callback = function(Value)
         autoRaceEnabled = Value
-        
         if Value then
-            notify("🏁 Auto Race ON", "Experimental mode", 2)
+            notify("🏁 Started", "Auto racing...", 2)
             task.spawn(autoRaceLoop)
         else
-            notify("Auto Race OFF", "", 2)
+            notify("Stopped", "", 2)
         end
     end
 })
 
 Tabs.Race:AddButton({
-    Title = "🔍 Find Race Remotes",
-    Description = "Debug: Show race remotes",
-    Callback = function()
-        local remotes = findRaceRemotes()
-        notify("🔍 Found", #remotes .. " race-related remotes", 3)
-        
-        for i, remote in pairs(remotes) do
-            if i <= 5 then
-                print("Remote " .. i .. ": " .. remote.Name .. " (" .. remote.ClassName .. ")")
-            end
-        end
-    end
-})
-
-Tabs.Race:AddButton({
-    Title = "🏁 Try Start Race",
-    Description = "Manual attempt",
+    Title = "🏁 Start Race Now",
+    Description = "Manual start",
     Callback = function()
         startRace()
     end
 })
 
--- ═══════════════════════════════════════
--- ⚙️ SETTINGS TAB
--- ═══════════════════════════════════════
-
-Tabs.Settings:AddParagraph({
-    Title = "Settings",
-    Content = "Configure your experience"
-})
-
-Tabs.Settings:AddButton({
-    Title = "Unload Script",
-    Description = "Remove completely",
+Tabs.Race:AddButton({
+    Title = "📍 Teleport to Start",
+    Description = "Use TeleportEvent",
     Callback = function()
-        autoRaceEnabled = false
-        autoWinterEnabled = false
-        
-        for _, connection in pairs(connections) do
-            if connection then
-                connection:Disconnect()
+        for _, remote in pairs(scanData.remoteEvents) do
+            if remote.Name == "TeleportEvent" then
+                pcall(function()
+                    remote:FireServer()
+                    notify("✅ Teleported", "", 2)
+                end)
+                return
             end
         end
-        
-        Fluent:Destroy()
+        notify("❌ Not Found", "TeleportEvent not detected", 3)
     end
 })
 
-InterfaceManager:SetLibrary(Fluent)
-SaveManager:SetLibrary(Fluent)
+-- ═══════════════════════════════════════
+-- 📊 INFO TAB
+-- ═══════════════════════════════════════
 
-InterfaceManager:SetFolder("GFHub")
-SaveManager:SetFolder("GFHub/CarZone")
+Tabs.Info:AddParagraph({
+    Title = "📊 Scan Results",
+    Content = "Data from last scan"
+})
 
-InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-SaveManager:BuildConfigSection(Tabs.Settings)
+Tabs.Info:AddButton({
+    Title = "📡 Show Remote Stats",
+    Description = "Display scan statistics",
+    Callback = function()
+        notify("📊 Scan Stats",
+            "RemoteEvents: " .. #scanData.remoteEvents .. "\n" ..
+            "Money Remotes: " .. #scanData.moneyRelated .. "\n" ..
+            "Winter Remotes: " .. #scanData.winterRelated .. "\n" ..
+            "Race Remotes: " .. #scanData.raceRelated, 5)
+    end
+})
 
-Tabs.Settings:AddSection("Info")
+Tabs.Info:AddParagraph({
+    Title = "💡 How to Use",
+    Content = "1. Go to 🔍 Scanner tab\n2. Click 'FULL GAME SCAN'\n3. Check console (F9) for results\n4. Use Winter/Race tabs\n\nThe scanner will find ALL game systems!"
+})
 
-Tabs.Settings:AddParagraph({
+Tabs.Info:AddParagraph({
     Title = "👤 Created by: Gael Fonzar",
-    Content = "Version: 1.1 (Fixed)\nGame: Car Zone\nStatus: ✅ Loaded"
+    Content = "Version: 2.0 - Full Scanner\nGame: Car Zone\nStatus: ✅ Loaded"
 })
 
 -- ═══════════════════════════════════════
--- 🔄 LOOPS
+-- 🚀 STARTUP
 -- ═══════════════════════════════════════
 
--- ESP Update (Optimized)
-local espUpdateTime = 0
-connections.ESPUpdate = RunService.RenderStepped:Connect(function(deltaTime)
-    espUpdateTime = espUpdateTime + deltaTime
-    if espUpdateTime >= 0.5 then -- Update every 0.5s instead of every frame
-        espUpdateTime = 0
-        updateSnowflakeESP()
-    end
+-- Auto scan on load
+task.spawn(function()
+    task.wait(2)
+    notify("🔍 Auto-Scanning", "Scanning game systems...", 3)
+    scanForRemotes()
+    task.wait(1)
+    scanWorkspaceForCollectibles()
 end)
 
--- Auto refresh snowflakes (Less frequent)
-local refreshTime = 0
-connections.SnowflakeRefresh = RunService.Heartbeat:Connect(function(deltaTime)
-    refreshTime = refreshTime + deltaTime
-    if refreshTime >= 15 and snowflakeESPEnabled then -- Every 15 seconds
-        refreshTime = 0
-        pcall(function()
-            local snowflakes = findSnowflakes()
-            for _, snowflake in pairs(snowflakes) do
-                if not espObjects[snowflake] then
-                    createSnowflakeESP(snowflake)
-                end
-            end
-        end)
-    end
-end)
+notify("🔍 GF SCANNER Loaded", "Press RightShift to open\nAuto-scan starting...", 5)
 
--- Cleanup
-local function cleanup()
-    autoRaceEnabled = false
-    autoWinterEnabled = false
-    
-    for _, connection in pairs(connections) do
-        pcall(function()
-            connection:Disconnect()
-        end)
-    end
-    
-    for snowflake, _ in pairs(espObjects) do
-        removeSnowflakeESP(snowflake)
-    end
-    
-    notify("👋 Unloaded", "GF HUB removed", 2)
-end
-
-Window:OnUnload(cleanup)
-
--- Save
-SaveManager:IgnoreThemeSettings()
-SaveManager:LoadAutoloadConfig()
-
--- Done
-notify("🏎️ GF HUB v1.1", "Fixed version loaded!\nPress RightShift", 4)
-
-print("═══════════════════════════════════════")
-print("🏎️ GF HUB - Car Zone v1.1 (FIXED)")
-print("✅ ESP Optimized")
-print("✅ Anti-Kick System")
-print("✅ Smooth Teleport")
-print("═══════════════════════════════════════")
+print("════════════════════════════════")
+print("🔍 GF HUB - CAR ZONE SCANNER v2.0")
+print("Created by: Gael Fonzar")
+print("Full game detection system")
+print("════════════════════════════════")
