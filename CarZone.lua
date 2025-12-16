@@ -1,16 +1,10 @@
 --[[
     ═══════════════════════════════════════
-    🏎️ GF HUB - Car Zone Auto Farm
+    🏎️ GF HUB - Car Zone Auto Farm (FIXED)
     ═══════════════════════════════════════
     Created by: Gael Fonzar
     Game: Car Zone Racing & Drifting
-    Game ID: 80200604311136
-    ═══════════════════════════════════════
-    Features:
-    • Auto Race (Highest Reward)
-    • Auto Collect Winter Event Snowflakes
-    • Auto Finish Races
-    • ESP for Snowflakes
+    Version: 1.1 (Anti-Kick + Optimized)
     ═══════════════════════════════════════
 ]]
 
@@ -24,7 +18,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 
@@ -32,10 +26,12 @@ local player = Players.LocalPlayer
 local autoRaceEnabled = false
 local autoWinterEnabled = false
 local snowflakeESPEnabled = false
-local autoFinishEnabled = false
+local collectDelay = 1.5 -- Delay anti-kick
+local useSmooth = true -- Movimiento suave
 
 local connections = {}
 local espObjects = {}
+local collectedSnowflakes = {}
 
 -- Helper Functions
 local function getChar()
@@ -61,28 +57,33 @@ local function notify(title, content, duration)
     })
 end
 
--- Find Snowflakes in Workspace
+-- Find Snowflakes (OPTIMIZED)
 local function findSnowflakes()
     local snowflakes = {}
     
-    -- Buscar en diferentes ubicaciones posibles
+    -- Buscar solo en lugares específicos para evitar crash
     local searchLocations = {
         Workspace:FindFirstChild("Snowflakes"),
         Workspace:FindFirstChild("Winter"),
-        Workspace:FindFirstChild("Event"),
-        Workspace:FindFirstChild("Collectibles"),
-        Workspace:FindFirstChild("Items"),
-        Workspace
+        Workspace:FindFirstChild("Map")
     }
     
     for _, location in pairs(searchLocations) do
         if location then
-            for _, obj in pairs(location:GetDescendants()) do
-                -- Buscar objetos que parezcan copos de nieve
-                if obj:IsA("BasePart") or obj:IsA("Model") then
+            for _, obj in pairs(location:GetChildren()) do
+                -- Buscar solo BaseParts para evitar lag
+                if obj:IsA("BasePart") and not collectedSnowflakes[obj] then
                     local name = obj.Name:lower()
-                    if name:find("snow") or name:find("flake") or name:find("winter") or name:find("collect") then
+                    if name:find("snow") or name:find("flake") or name:find("winter") then
                         table.insert(snowflakes, obj)
+                    end
+                elseif obj:IsA("Model") then
+                    local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                    if primary and not collectedSnowflakes[obj] then
+                        local name = obj.Name:lower()
+                        if name:find("snow") or name:find("flake") or name:find("winter") then
+                            table.insert(snowflakes, obj)
+                        end
                     end
                 end
             end
@@ -92,73 +93,61 @@ local function findSnowflakes()
     return snowflakes
 end
 
--- ESP for Snowflakes
+-- ESP for Snowflakes (FIXED - NO CRASH)
 local function createSnowflakeESP(snowflake)
     if not snowflake or espObjects[snowflake] then return end
     
-    local part = snowflake:IsA("Model") and snowflake:FindFirstChildWhichIsA("BasePart") or snowflake
-    if not part then return end
-    
-    -- Create Highlight
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "GF_SnowflakeESP"
-    highlight.Adornee = snowflake:IsA("Model") and snowflake or nil
-    highlight.FillColor = Color3.fromRGB(135, 206, 250)
-    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.FillTransparency = 0.5
-    highlight.OutlineTransparency = 0
-    
-    if snowflake:IsA("Model") then
-        highlight.Parent = snowflake
-    else
-        highlight.Adornee = snowflake
-        highlight.Parent = snowflake
-    end
-    
-    -- Create BillboardGui
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "GF_SnowflakeLabel"
-    billboard.Adornee = part
-    billboard.Size = UDim2.new(0, 100, 0, 40)
-    billboard.StudsOffset = Vector3.new(0, 2, 0)
-    billboard.AlwaysOnTop = true
-    billboard.Parent = part
-    
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = "❄️ Snowflake"
-    label.TextColor3 = Color3.fromRGB(135, 206, 250)
-    label.TextStrokeTransparency = 0.5
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 14
-    label.Parent = billboard
-    
-    local distanceLabel = Instance.new("TextLabel")
-    distanceLabel.Size = UDim2.new(1, 0, 0.5, 0)
-    distanceLabel.Position = UDim2.new(0, 0, 0.5, 0)
-    distanceLabel.BackgroundTransparency = 1
-    distanceLabel.Text = "0m"
-    distanceLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    distanceLabel.TextStrokeTransparency = 0.5
-    distanceLabel.Font = Enum.Font.Gotham
-    distanceLabel.TextSize = 12
-    distanceLabel.Parent = billboard
-    
-    espObjects[snowflake] = {
-        highlight = highlight,
-        billboard = billboard,
-        distanceLabel = distanceLabel,
-        part = part
-    }
+    pcall(function()
+        local part = snowflake:IsA("Model") and (snowflake.PrimaryPart or snowflake:FindFirstChildWhichIsA("BasePart")) or snowflake
+        if not part or not part:IsA("BasePart") then return end
+        
+        -- Solo crear BillboardGui (más ligero que Highlight)
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "GF_SnowESP"
+        billboard.Adornee = part
+        billboard.Size = UDim2.new(0, 100, 0, 50)
+        billboard.StudsOffset = Vector3.new(0, 2, 0)
+        billboard.AlwaysOnTop = true
+        billboard.Parent = part
+        
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 1, 0)
+        frame.BackgroundColor3 = Color3.fromRGB(135, 206, 250)
+        frame.BackgroundTransparency = 0.7
+        frame.BorderSizePixel = 2
+        frame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+        frame.Parent = billboard
+        
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 0.6, 0)
+        label.BackgroundTransparency = 1
+        label.Text = "❄️"
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        label.TextScaled = true
+        label.Font = Enum.Font.GothamBold
+        label.Parent = frame
+        
+        local distLabel = Instance.new("TextLabel")
+        distLabel.Size = UDim2.new(1, 0, 0.4, 0)
+        distLabel.Position = UDim2.new(0, 0, 0.6, 0)
+        distLabel.BackgroundTransparency = 1
+        distLabel.Text = "0m"
+        distLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        distLabel.TextScaled = true
+        distLabel.Font = Enum.Font.Gotham
+        distLabel.Parent = frame
+        
+        espObjects[snowflake] = {
+            billboard = billboard,
+            distLabel = distLabel,
+            part = part
+        }
+    end)
 end
 
 local function removeSnowflakeESP(snowflake)
     if espObjects[snowflake] then
         pcall(function()
-            if espObjects[snowflake].highlight then
-                espObjects[snowflake].highlight:Destroy()
-            end
             if espObjects[snowflake].billboard then
                 espObjects[snowflake].billboard:Destroy()
             end
@@ -174,12 +163,14 @@ local function updateSnowflakeESP()
     if not myRoot then return end
     
     for snowflake, espData in pairs(espObjects) do
-        if snowflake and snowflake.Parent and espData.part and espData.distanceLabel then
-            local distance = math.floor((myRoot.Position - espData.part.Position).Magnitude)
-            espData.distanceLabel.Text = distance .. "m"
-        else
-            removeSnowflakeESP(snowflake)
-        end
+        pcall(function()
+            if snowflake and snowflake.Parent and espData.part and espData.distLabel then
+                local distance = math.floor((myRoot.Position - espData.part.Position).Magnitude)
+                espData.distLabel.Text = distance .. "m"
+            else
+                removeSnowflakeESP(snowflake)
+            end
+        end)
     end
 end
 
@@ -198,41 +189,78 @@ local function updateAllSnowflakeESP()
     end
 end
 
--- Auto Collect Snowflakes
-local function teleportToSnowflake(snowflake)
+-- SMOOTH TELEPORT (Anti-Kick)
+local function smoothTeleport(targetPos)
     local root = getRoot()
     if not root then return false end
     
-    local targetPart = snowflake:IsA("Model") and snowflake:FindFirstChildWhichIsA("BasePart") or snowflake
-    if not targetPart then return false end
+    if useSmooth then
+        -- Movimiento suave en vez de teleport instantáneo
+        local distance = (root.Position - targetPos).Magnitude
+        local steps = math.clamp(math.floor(distance / 10), 3, 10)
+        
+        for i = 1, steps do
+            if not autoWinterEnabled then break end
+            
+            local alpha = i / steps
+            local newPos = root.Position:Lerp(targetPos, alpha)
+            root.CFrame = CFrame.new(newPos)
+            
+            task.wait(0.1)
+        end
+    else
+        root.CFrame = CFrame.new(targetPos)
+    end
     
-    root.CFrame = targetPart.CFrame
     return true
 end
 
+-- Auto Collect Snowflakes (FIXED - ANTI-KICK)
 local function autoCollectSnowflakes()
     while autoWinterEnabled do
         local snowflakes = findSnowflakes()
         
         if #snowflakes == 0 then
-            notify("⚠️ No Snowflakes", "No snowflakes found in workspace", 3)
+            notify("⚠️ No Snowflakes", "Waiting for snowflakes...", 2)
             task.wait(5)
         else
+            -- Ordenar por distancia
+            local root = getRoot()
+            if root then
+                table.sort(snowflakes, function(a, b)
+                    local partA = a:IsA("Model") and (a.PrimaryPart or a:FindFirstChildWhichIsA("BasePart")) or a
+                    local partB = b:IsA("Model") and (b.PrimaryPart or b:FindFirstChildWhichIsA("BasePart")) or b
+                    
+                    if partA and partB then
+                        return (root.Position - partA.Position).Magnitude < (root.Position - partB.Position).Magnitude
+                    end
+                    return false
+                end)
+            end
+            
             for _, snowflake in pairs(snowflakes) do
                 if not autoWinterEnabled then break end
                 
                 if snowflake and snowflake.Parent then
-                    local success = teleportToSnowflake(snowflake)
-                    if success then
-                        task.wait(0.5) -- Esperar a que se recoja
+                    local targetPart = snowflake:IsA("Model") and (snowflake.PrimaryPart or snowflake:FindFirstChildWhichIsA("BasePart")) or snowflake
+                    
+                    if targetPart then
+                        -- Teleport suave
+                        local success = smoothTeleport(targetPart.Position)
                         
-                        -- Verificar si fue removido (recolectado)
-                        if not snowflake.Parent then
-                            notify("✅ Collected", "Snowflake collected!", 1)
+                        if success then
+                            -- Esperar a recoger
+                            task.wait(collectDelay)
+                            
+                            -- Marcar como recolectado
+                            collectedSnowflakes[snowflake] = true
+                            
+                            -- Verificar si fue removido
+                            if not snowflake.Parent then
+                                notify("✅ Collected", "Snowflake +1", 1)
+                            end
                         end
                     end
-                    
-                    task.wait(0.3)
                 end
             end
         end
@@ -241,140 +269,90 @@ local function autoCollectSnowflakes()
     end
 end
 
--- Find Race with Highest Reward
-local function findBestRace()
-    -- Buscar en lugares comunes de UI de carreras
-    local raceUI = player:FindFirstChild("PlayerGui")
-    if not raceUI then return nil end
+-- FIND RACE REMOTES (FIXED)
+local function findRaceRemotes()
+    local remotes = {}
     
-    -- Buscar frames de carreras
-    for _, gui in pairs(raceUI:GetDescendants()) do
-        if gui:IsA("TextLabel") or gui:IsA("TextButton") then
-            local text = gui.Text:lower()
-            -- Buscar texto que indique recompensas altas
-            if text:find("race") or text:find("start") or text:find("join") then
-                return gui
+    -- Buscar en ReplicatedStorage
+    for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local name = obj.Name:lower()
+            if name:find("race") or name:find("start") or name:find("join") or name:find("event") then
+                table.insert(remotes, obj)
             end
         end
     end
     
-    return nil
+    return remotes
 end
 
--- Auto Start Race
+-- Start Race (MULTIPLE METHODS)
 local function startRace()
-    local raceButton = findBestRace()
-    
-    if raceButton and raceButton:IsA("TextButton") then
-        -- Simular click
-        for _, connection in pairs(getconnections(raceButton.MouseButton1Click)) do
-            connection:Fire()
-        end
-        notify("🏁 Race Started", "Starting race...", 2)
-        return true
-    end
-    
-    -- Método alternativo: buscar RemoteEvents de carreras
-    for _, remote in pairs(ReplicatedStorage:GetDescendants()) do
-        if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
-            local name = remote.Name:lower()
-            if name:find("race") or name:find("start") or name:find("join") then
-                pcall(function()
-                    if remote:IsA("RemoteEvent") then
-                        remote:FireServer()
-                    else
-                        remote:InvokeServer()
+    -- Método 1: Buscar botones en UI
+    local playerGui = player:FindFirstChild("PlayerGui")
+    if playerGui then
+        for _, gui in pairs(playerGui:GetDescendants()) do
+            if gui:IsA("TextButton") then
+                local text = gui.Text:lower()
+                if text:find("start") or text:find("race") or text:find("join") or text:find("play") then
+                    -- Intentar hacer click
+                    for _, connection in pairs(getconnections(gui.MouseButton1Click)) do
+                        pcall(function()
+                            connection:Fire()
+                        end)
                     end
-                end)
-                notify("🏁 Race Started", "Attempting to start race...", 2)
-                return true
+                    
+                    -- También simular click visual
+                    pcall(function()
+                        gui.MouseButton1Click:Fire()
+                    end)
+                    
+                    notify("🏁 Race Started", "Method: UI Button", 2)
+                    return true
+                end
             end
         end
+    end
+    
+    -- Método 2: Buscar RemoteEvents
+    local remotes = findRaceRemotes()
+    for _, remote in pairs(remotes) do
+        pcall(function()
+            if remote:IsA("RemoteEvent") then
+                remote:FireServer()
+                notify("🏁 Race Started", "Method: RemoteEvent", 2)
+            elseif remote:IsA("RemoteFunction") then
+                remote:InvokeServer()
+                notify("🏁 Race Started", "Method: RemoteFunction", 2)
+            end
+        end)
+        task.wait(0.5)
     end
     
     return false
 end
 
--- Auto Finish Race
-local function findRaceCheckpoints()
-    local checkpoints = {}
-    
-    -- Buscar checkpoints en workspace
-    for _, obj in pairs(Workspace:GetDescendants()) do
-        if obj:IsA("BasePart") or obj:IsA("Model") then
-            local name = obj.Name:lower()
-            if name:find("checkpoint") or name:find("finish") or name:find("gate") then
-                table.insert(checkpoints, obj)
-            end
-        end
-    end
-    
-    return checkpoints
-end
-
-local function autoCompleteRace()
-    if not autoFinishEnabled then return end
-    
-    local checkpoints = findRaceCheckpoints()
-    
-    if #checkpoints > 0 then
-        -- Ordenar checkpoints por distancia
-        table.sort(checkpoints, function(a, b)
-            local rootPos = getRoot().Position
-            local partA = a:IsA("Model") and a:FindFirstChildWhichIsA("BasePart") or a
-            local partB = b:IsA("Model") and b:FindFirstChildWhichIsA("BasePart") or b
-            
-            if partA and partB then
-                return (rootPos - partA.Position).Magnitude < (rootPos - partB.Position).Magnitude
-            end
-            return false
-        end)
-        
-        -- Teleport a cada checkpoint
-        for _, checkpoint in pairs(checkpoints) do
-            if not autoFinishEnabled then break end
-            
-            local root = getRoot()
-            if root then
-                local targetPart = checkpoint:IsA("Model") and checkpoint:FindFirstChildWhichIsA("BasePart") or checkpoint
-                if targetPart then
-                    root.CFrame = targetPart.CFrame
-                    task.wait(0.5)
-                end
-            end
-        end
-        
-        notify("✅ Race Completed", "Finished race!", 2)
-    end
-end
-
 -- Auto Race Loop
 local function autoRaceLoop()
     while autoRaceEnabled do
-        -- Intentar iniciar carrera
+        notify("🔄 Trying Race", "Attempting to start...", 2)
+        
         local started = startRace()
         
         if started then
-            task.wait(2) -- Esperar a que cargue
-            
-            -- Auto completar si está activado
-            if autoFinishEnabled then
-                autoCompleteRace()
-            end
-            
-            task.wait(5) -- Esperar antes de siguiente carrera
+            task.wait(10) -- Esperar tiempo de carrera
         else
-            task.wait(3)
+            task.wait(5)
         end
     end
 end
 
 -- Create Window
 local Window = Fluent:CreateWindow({
-    Title = "🏎️ GF HUB - Car Zone",
-    SubTitle = "by Gael Fonzar",
+    Title = "🏎️ GF HUB - Car Zone v1.1",
+    SubTitle = "by Gael Fonzar (Fixed)",
     TabWidth = 160,
-    Size = UDim2.fromOffset(550, 400),
+    Size = UDim2.fromOffset(550, 420),
     Acrylic = true,
     Theme = "Darker",
     MinimizeKey = Enum.KeyCode.RightShift
@@ -383,8 +361,8 @@ local Window = Fluent:CreateWindow({
 -- Create Tabs
 local Tabs = {
     Main = Window:AddTab({ Title = "🏠 Main", Icon = "home" }),
-    Race = Window:AddTab({ Title = "🏁 Auto Race", Icon = "flag" }),
     Winter = Window:AddTab({ Title = "❄️ Winter Event", Icon = "snowflake" }),
+    Race = Window:AddTab({ Title = "🏁 Race", Icon = "flag" }),
     Settings = Window:AddTab({ Title = "⚙️ Settings", Icon = "settings" })
 }
 
@@ -393,66 +371,13 @@ local Tabs = {
 -- ═══════════════════════════════════════
 
 Tabs.Main:AddParagraph({
-    Title = "Welcome to GF HUB!",
-    Content = "Car Zone Auto Farm Script\n\nFeatures:\n• Auto Race (Highest Rewards)\n• Auto Winter Event\n• Auto Collect Snowflakes\n• Snowflake ESP"
+    Title = "Welcome to GF HUB v1.1!",
+    Content = "FIXES:\n• ESP Optimized (No Crash)\n• Anti-Kick System\n• Smooth Teleport\n• Better Race Detection"
 })
 
 Tabs.Main:AddParagraph({
-    Title = "How to Use:",
-    Content = "1. Go to 🏁 Auto Race tab\n2. Enable Auto Race\n3. Enable Auto Finish for instant completion\n\nFor Winter Event:\n1. Go to ❄️ Winter Event tab\n2. Enable Snowflake ESP to see them\n3. Enable Auto Collect"
-})
-
--- ═══════════════════════════════════════
--- 🏁 AUTO RACE TAB
--- ═══════════════════════════════════════
-
-Tabs.Race:AddParagraph({
-    Title = "Auto Race System",
-    Content = "Automatically starts and completes races for maximum rewards"
-})
-
-local AutoRaceToggle = Tabs.Race:AddToggle("AutoRace", {
-    Title = "🏁 Auto Start Races",
-    Description = "Automatically join and start races",
-    Default = false,
-    Callback = function(Value)
-        autoRaceEnabled = Value
-        
-        if Value then
-            notify("🏁 Auto Race ON", "Starting auto race...", 2)
-            task.spawn(autoRaceLoop)
-        else
-            notify("Auto Race OFF", "", 2)
-        end
-    end
-})
-
-local AutoFinishToggle = Tabs.Race:AddToggle("AutoFinish", {
-    Title = "⚡ Auto Finish Races",
-    Description = "Instantly complete races (teleport to checkpoints)",
-    Default = false,
-    Callback = function(Value)
-        autoFinishEnabled = Value
-        notify(Value and "⚡ Auto Finish ON" or "Auto Finish OFF", "", 2)
-    end
-})
-
-Tabs.Race:AddSection("Manual Controls")
-
-Tabs.Race:AddButton({
-    Title = "🏁 Start Race Manually",
-    Description = "Try to start a race now",
-    Callback = function()
-        startRace()
-    end
-})
-
-Tabs.Race:AddButton({
-    Title = "⚡ Complete Race Now",
-    Description = "Teleport through checkpoints",
-    Callback = function()
-        autoCompleteRace()
-    end
+    Title = "⚠️ Important",
+    Content = "Snowflake collection uses SMOOTH movement to avoid kicks.\n\nIncrease 'Collect Delay' if you still get kicked."
 })
 
 -- ═══════════════════════════════════════
@@ -460,30 +385,37 @@ Tabs.Race:AddButton({
 -- ═══════════════════════════════════════
 
 Tabs.Winter:AddParagraph({
-    Title = "Winter Event",
-    Content = "Auto collect snowflakes during races or free roam"
+    Title = "Winter Event (FIXED)",
+    Content = "Now with anti-kick protection!"
 })
 
 local SnowflakeESPToggle = Tabs.Winter:AddToggle("SnowflakeESP", {
     Title = "👁️ Snowflake ESP",
-    Description = "See snowflakes through walls",
+    Description = "Optimized - Won't crash",
     Default = false,
     Callback = function(Value)
         snowflakeESPEnabled = Value
-        updateAllSnowflakeESP()
+        if Value then
+            updateAllSnowflakeESP()
+        else
+            for snowflake, _ in pairs(espObjects) do
+                removeSnowflakeESP(snowflake)
+            end
+        end
         notify(Value and "❄️ ESP ON" or "ESP OFF", "", 2)
     end
 })
 
 local AutoWinterToggle = Tabs.Winter:AddToggle("AutoWinter", {
     Title = "❄️ Auto Collect Snowflakes",
-    Description = "Automatically teleport and collect snowflakes",
+    Description = "With anti-kick protection",
     Default = false,
     Callback = function(Value)
         autoWinterEnabled = Value
         
         if Value then
-            notify("❄️ Auto Winter ON", "Collecting snowflakes...", 2)
+            collectedSnowflakes = {} -- Reset
+            notify("❄️ Auto Winter ON", "Using smooth movement", 2)
             task.spawn(autoCollectSnowflakes)
         else
             notify("Auto Winter OFF", "", 2)
@@ -491,55 +423,102 @@ local AutoWinterToggle = Tabs.Winter:AddToggle("AutoWinter", {
     end
 })
 
+local SmoothToggle = Tabs.Winter:AddToggle("SmoothMovement", {
+    Title = "🌊 Smooth Movement",
+    Description = "Prevents kicks (Recommended: ON)",
+    Default = true,
+    Callback = function(Value)
+        useSmooth = Value
+        notify(Value and "Smooth ON" or "Smooth OFF", "", 2)
+    end
+})
+
+local CollectDelaySlider = Tabs.Winter:AddSlider("CollectDelay", {
+    Title = "Collect Delay",
+    Description = "Time between collections (Anti-Kick)",
+    Default = 1.5,
+    Min = 0.5,
+    Max = 5,
+    Rounding = 1,
+    Callback = function(Value)
+        collectDelay = Value
+        notify("Delay Set", Value .. " seconds", 2)
+    end
+})
+
 Tabs.Winter:AddSection("Manual Controls")
 
 Tabs.Winter:AddButton({
-    Title = "🔄 Refresh Snowflake ESP",
-    Description = "Update ESP to find new snowflakes",
+    Title = "🔄 Refresh ESP",
+    Description = "Find new snowflakes",
     Callback = function()
         updateAllSnowflakeESP()
     end
 })
 
 Tabs.Winter:AddButton({
-    Title = "📍 Teleport to Nearest",
-    Description = "Teleport to closest snowflake",
+    Title = "📊 Count Snowflakes",
+    Description = "Show available snowflakes",
     Callback = function()
         local snowflakes = findSnowflakes()
-        local root = getRoot()
-        
-        if #snowflakes > 0 and root then
-            -- Find closest
-            local closest = nil
-            local closestDist = math.huge
-            
-            for _, snowflake in pairs(snowflakes) do
-                local part = snowflake:IsA("Model") and snowflake:FindFirstChildWhichIsA("BasePart") or snowflake
-                if part then
-                    local dist = (root.Position - part.Position).Magnitude
-                    if dist < closestDist then
-                        closest = snowflake
-                        closestDist = dist
-                    end
-                end
-            end
-            
-            if closest then
-                teleportToSnowflake(closest)
-                notify("✅ Teleported", "Teleported to nearest snowflake", 2)
-            end
-        else
-            notify("❌ No Snowflakes", "No snowflakes found!", 3)
-        end
+        notify("❄️ Found", #snowflakes .. " snowflakes available", 3)
     end
 })
 
 Tabs.Winter:AddButton({
-    Title = "📊 Show Snowflake Count",
-    Description = "Display how many snowflakes are available",
+    Title = "🗑️ Clear Collected List",
+    Description = "Reset collected snowflakes",
     Callback = function()
-        local snowflakes = findSnowflakes()
-        notify("❄️ Snowflakes Found", #snowflakes .. " snowflakes in workspace", 3)
+        collectedSnowflakes = {}
+        notify("✅ Cleared", "Collected list reset", 2)
+    end
+})
+
+-- ═══════════════════════════════════════
+-- 🏁 RACE TAB
+-- ═══════════════════════════════════════
+
+Tabs.Race:AddParagraph({
+    Title = "Auto Race (Experimental)",
+    Content = "Trying multiple methods to start races"
+})
+
+local AutoRaceToggle = Tabs.Race:AddToggle("AutoRace", {
+    Title = "🏁 Auto Start Races",
+    Description = "Experimental feature",
+    Default = false,
+    Callback = function(Value)
+        autoRaceEnabled = Value
+        
+        if Value then
+            notify("🏁 Auto Race ON", "Experimental mode", 2)
+            task.spawn(autoRaceLoop)
+        else
+            notify("Auto Race OFF", "", 2)
+        end
+    end
+})
+
+Tabs.Race:AddButton({
+    Title = "🔍 Find Race Remotes",
+    Description = "Debug: Show race remotes",
+    Callback = function()
+        local remotes = findRaceRemotes()
+        notify("🔍 Found", #remotes .. " race-related remotes", 3)
+        
+        for i, remote in pairs(remotes) do
+            if i <= 5 then
+                print("Remote " .. i .. ": " .. remote.Name .. " (" .. remote.ClassName .. ")")
+            end
+        end
+    end
+})
+
+Tabs.Race:AddButton({
+    Title = "🏁 Try Start Race",
+    Description = "Manual attempt",
+    Callback = function()
+        startRace()
     end
 })
 
@@ -548,16 +527,23 @@ Tabs.Winter:AddButton({
 -- ═══════════════════════════════════════
 
 Tabs.Settings:AddParagraph({
-    Title = "GF HUB Settings",
+    Title = "Settings",
     Content = "Configure your experience"
 })
 
 Tabs.Settings:AddButton({
     Title = "Unload Script",
-    Description = "Remove GF HUB completely",
+    Description = "Remove completely",
     Callback = function()
         autoRaceEnabled = false
         autoWinterEnabled = false
+        
+        for _, connection in pairs(connections) do
+            if connection then
+                connection:Disconnect()
+            end
+        end
+        
         Fluent:Destroy()
     end
 })
@@ -571,76 +557,74 @@ SaveManager:SetFolder("GFHub/CarZone")
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 
-Tabs.Settings:AddSection("Credits")
+Tabs.Settings:AddSection("Info")
 
 Tabs.Settings:AddParagraph({
     Title = "👤 Created by: Gael Fonzar",
-    Content = "Version: 1.0\nGame: Car Zone Racing & Drifting\nStatus: ✅ Loaded"
+    Content = "Version: 1.1 (Fixed)\nGame: Car Zone\nStatus: ✅ Loaded"
 })
 
 -- ═══════════════════════════════════════
--- 🔄 MAIN LOOP
+-- 🔄 LOOPS
 -- ═══════════════════════════════════════
 
--- ESP Update Loop
-connections.ESPUpdate = RunService.RenderStepped:Connect(function()
-    updateSnowflakeESP()
+-- ESP Update (Optimized)
+local espUpdateTime = 0
+connections.ESPUpdate = RunService.RenderStepped:Connect(function(deltaTime)
+    espUpdateTime = espUpdateTime + deltaTime
+    if espUpdateTime >= 0.5 then -- Update every 0.5s instead of every frame
+        espUpdateTime = 0
+        updateSnowflakeESP()
+    end
 end)
 
--- Auto refresh snowflakes every 10 seconds
-connections.SnowflakeRefresh = RunService.Heartbeat:Connect(function()
-    task.wait(10)
-    if snowflakeESPEnabled then
-        local snowflakes = findSnowflakes()
-        
-        -- Add ESP to new snowflakes
-        for _, snowflake in pairs(snowflakes) do
-            if not espObjects[snowflake] then
-                createSnowflakeESP(snowflake)
+-- Auto refresh snowflakes (Less frequent)
+local refreshTime = 0
+connections.SnowflakeRefresh = RunService.Heartbeat:Connect(function(deltaTime)
+    refreshTime = refreshTime + deltaTime
+    if refreshTime >= 15 and snowflakeESPEnabled then -- Every 15 seconds
+        refreshTime = 0
+        pcall(function()
+            local snowflakes = findSnowflakes()
+            for _, snowflake in pairs(snowflakes) do
+                if not espObjects[snowflake] then
+                    createSnowflakeESP(snowflake)
+                end
             end
-        end
+        end)
     end
 end)
 
--- Cleanup on character respawn
-player.CharacterAdded:Connect(function()
-    task.wait(2)
-    if snowflakeESPEnabled then
-        updateAllSnowflakeESP()
-    end
-end)
-
--- Cleanup Function
+-- Cleanup
 local function cleanup()
     autoRaceEnabled = false
     autoWinterEnabled = false
     
     for _, connection in pairs(connections) do
-        if connection then
+        pcall(function()
             connection:Disconnect()
-        end
+        end)
     end
     
     for snowflake, _ in pairs(espObjects) do
         removeSnowflakeESP(snowflake)
     end
     
-    notify("👋 GF HUB Unloaded", "Script removed successfully", 3)
+    notify("👋 Unloaded", "GF HUB removed", 2)
 end
 
 Window:OnUnload(cleanup)
 
--- Save settings
+-- Save
 SaveManager:IgnoreThemeSettings()
 SaveManager:LoadAutoloadConfig()
 
--- Final notification
-notify("🏎️ GF HUB Loaded", "Car Zone script ready!\nPress RightShift to toggle", 5)
+-- Done
+notify("🏎️ GF HUB v1.1", "Fixed version loaded!\nPress RightShift", 4)
 
 print("═══════════════════════════════════════")
-print("🏎️ GF HUB - Car Zone Auto Farm")
-print("Created by: Gael Fonzar")
-print("Game: Car Zone Racing & Drifting")
-print("Features: Auto Race + Winter Event")
-print("Press RightShift to open menu")
+print("🏎️ GF HUB - Car Zone v1.1 (FIXED)")
+print("✅ ESP Optimized")
+print("✅ Anti-Kick System")
+print("✅ Smooth Teleport")
 print("═══════════════════════════════════════")
